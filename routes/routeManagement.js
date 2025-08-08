@@ -1,17 +1,17 @@
-// routes/routesRoutes.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../config/db');
-const {authenticateToken} = require('../middlewares/authMiddleware');
+const { authenticateToken } = require('../middlewares/authMiddleware');
+const { PrismaClient } = require('../generated/prisma');
+const prisma = new PrismaClient();
 
 
 // Get all routes for the authenticated user
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const [routes] = await pool.execute(
-      'SELECT * FROM routes WHERE user_id = ? ORDER BY created_at DESC',
-      [req.user.id]
-    );
+    const routes = await prisma.route.findMany({
+      where: { user_id: req.user.id },
+      orderBy: { created_at: 'desc' }
+    });
     res.json(routes);
   } catch (error) {
     console.error('Error fetching routes:', error);
@@ -28,16 +28,23 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'All fields are required' });
     }
 
-    const [result] = await pool.execute(
-      'INSERT INTO routes (user_id, name, code, distance, base_fare, per_km_rate, stops, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [req.user.id, name, code, distance, base_fare, per_km_rate, JSON.stringify(stops), active !== false]
-    );
+    const newRoute = await prisma.route.create({
+      data: {
+        user_id: req.user.id,
+        name,
+        code,
+        distance,
+        base_fare,
+        per_km_rate,
+        stops: JSON.stringify(stops),
+        active: active !== false
+      }
+    });
 
-    const [newRoute] = await pool.execute('SELECT * FROM routes WHERE id = ?', [result.insertId]);
-    res.status(201).json(newRoute[0]);
+    res.status(201).json(newRoute);
   } catch (error) {
     console.error('Error creating route:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error.code === 'P2002') { // Prisma unique constraint error code
       res.status(400).json({ error: 'Route code already exists' });
     } else {
       res.status(500).json({ error: 'Internal server error' });
@@ -49,38 +56,65 @@ router.post('/', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { name, code, distance, base_fare, per_km_rate, stops, active } = req.body;
-    const routeId = req.params.id;
+    const routeId = parseInt(req.params.id);
 
-    const [result] = await pool.execute(
-      'UPDATE routes SET name = ?, code = ?, distance = ?, base_fare = ?, per_km_rate = ?, stops = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
-      [name, code, distance, base_fare, per_km_rate, JSON.stringify(stops), active, routeId, req.user.id]
-    );
+    // First check if route exists and belongs to user
+    const existingRoute = await prisma.route.findFirst({
+      where: {
+        id: routeId,
+        user_id: req.user.id
+      }
+    });
 
-    if (result.affectedRows === 0) {
+    if (!existingRoute) {
       return res.status(404).json({ error: 'Route not found or unauthorized' });
     }
 
-    const [updatedRoute] = await pool.execute('SELECT * FROM routes WHERE id = ?', [routeId]);
-    res.json(updatedRoute[0]);
+    const updatedRoute = await prisma.route.update({
+      where: { id: routeId },
+      data: {
+        name,
+        code,
+        distance,
+        base_fare,
+        per_km_rate,
+        stops: JSON.stringify(stops),
+        active,
+        updated_at: new Date()
+      }
+    });
+
+    res.json(updatedRoute);
   } catch (error) {
     console.error('Error updating route:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    if (error.code === 'P2002') { // Prisma unique constraint violation
+      res.status(400).json({ error: 'Route code already exists' });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 });
 
 // Delete a route
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
-    const routeId = req.params.id;
+    const routeId = parseInt(req.params.id);
 
-    const [result] = await pool.execute(
-      'DELETE FROM routes WHERE id = ? AND user_id = ?',
-      [routeId, req.user.id]
-    );
+    // First check if route exists and belongs to user
+    const existingRoute = await prisma.route.findFirst({
+      where: {
+        id: routeId,
+        user_id: req.user.id
+      }
+    });
 
-    if (result.affectedRows === 0) {
+    if (!existingRoute) {
       return res.status(404).json({ error: 'Route not found or unauthorized' });
     }
+
+    await prisma.route.delete({
+      where: { id: routeId }
+    });
 
     res.json({ message: 'Route deleted successfully' });
   } catch (error) {

@@ -6,7 +6,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "prisma:merge": "node prisma/merge-prisma.js",
     "prisma:dev": "npm run prisma:merge && npx prisma migrate dev",
-    "prisma:generate": "npm run prisma:merge && npx prisma generate"
+    "prisma:generate": "npm run prisma:merge && npx prisma generate",
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",

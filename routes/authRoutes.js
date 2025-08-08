@@ -2,54 +2,72 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const pool = require('../config/db');
+const jwt = require('jsonwebtoken');;
 require('dotenv').config();
+// Register Route
+const { PrismaClient } = require('../generated/prisma');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
 
-// Register Route
+
+
+const prisma = new PrismaClient();
+
 router.post('/register', async (req, res) => {
   try {
-    console.log(req.body," is body")
     const { name, email, password, phone, role, company_name } = req.body;
-    console.log(name, email, password, phone, role, company_name," is the console")
+
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
-    const [existingUsers] = await pool.execute('SELECT id FROM users WHERE email = ?', [email]);
-    if (existingUsers.length > 0) {
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser) {
       return res.status(400).json({ error: 'User already exists with this email' });
     }
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const [result] = await pool.execute(
-      'INSERT INTO users (name, email, password, phone, role, company_name) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, email, hashedPassword, phone, role || 'owner', company_name]
-    );
-
-    const token = jwt.sign({ userId: result.insertId }, JWT_SECRET, { expiresIn: '7d' });
-
-    res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user: {
-        id: result.insertId,
+    // Create new user
+    const newUser = await prisma.user.create({
+      data: {
         name,
         email,
+        password: hashedPassword,
         phone,
         role: role || 'owner',
         company_name
       }
     });
+
+    // Generate JWT token
+    const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      token,
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        phone: newUser.phone,
+        role: newUser.role,
+        company_name: newUser.company_name
+      }
+    });
+
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 router.post('/login', async (req, res) => {
   try {
@@ -59,13 +77,14 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Find user
-    const [users] = await pool.execute('SELECT * FROM users WHERE email = ?', [email]);
-    if (users.length === 0) {
+    // Find user in Prisma
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
-    const user = users[0];
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);

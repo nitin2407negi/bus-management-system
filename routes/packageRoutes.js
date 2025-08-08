@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../config/db'); // Adjust path if needed
 const { authenticateToken } = require('../middlewares/authMiddleware');
+const { PrismaClient } = require('../generated/prisma');
+const prisma = new PrismaClient();
 
 // Utility function
 function generatePackageNumber() {
@@ -22,13 +23,25 @@ router.post('/', authenticateToken, async (req, res) => {
 
     const package_number = generatePackageNumber();
 
-    const [result] = await pool.execute(
-      'INSERT INTO packages (bus_id, package_number, sender_name, sender_phone, receiver_name, receiver_phone, from_stop, to_stop, description, weight, fare) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [bus_id, package_number, sender_name, sender_phone, receiver_name, receiver_phone, from_stop, to_stop, description, weight, fare]
-    );
+    const newPackage = await prisma.package.create({
+      data: {
+        bus_id,
+        package_number,
+        sender_name,
+        sender_phone,
+        receiver_name,
+        receiver_phone,
+        from_stop,
+        to_stop,
+        description,
+        weight,
+        fare,
+        status: 'booked', // Default status
+        booked_at: new Date()
+      }
+    });
 
-    const [newPackage] = await pool.execute('SELECT * FROM packages WHERE id = ?', [result.insertId]);
-    res.status(201).json(newPackage[0]);
+    res.status(201).json(newPackage);
   } catch (error) {
     console.error('Error creating package:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -38,20 +51,22 @@ router.post('/', authenticateToken, async (req, res) => {
 // Get packages for a bus
 router.get('/bus/:busId', authenticateToken, async (req, res) => {
   try {
-    const busId = req.params.busId;
+    const busId = parseInt(req.params.busId);
     const { status } = req.query;
 
-    let query = 'SELECT * FROM packages WHERE bus_id = ?';
-    let params = [busId];
+    const where = {
+      bus_id: busId
+    };
 
     if (status) {
-      query += ' AND status = ?';
-      params.push(status);
+      where.status = status;
     }
 
-    query += ' ORDER BY booked_at DESC';
+    const packages = await prisma.package.findMany({
+      where,
+      orderBy: { booked_at: 'desc' }
+    });
 
-    const [packages] = await pool.execute(query, params);
     res.json(packages);
   } catch (error) {
     console.error('Error fetching packages:', error);
@@ -63,26 +78,28 @@ router.get('/bus/:busId', authenticateToken, async (req, res) => {
 router.put('/:id/status', authenticateToken, async (req, res) => {
   try {
     const { status } = req.body;
-    const packageId = req.params.id;
+    const packageId = parseInt(req.params.id);
 
     if (!['booked', 'in_transit', 'delivered', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    const [result] = await pool.execute(
-      'UPDATE packages SET status = ?, delivered_at = ? WHERE id = ?',
-      [status, status === 'delivered' ? new Date() : null, packageId]
-    );
+    const updatedPackage = await prisma.package.update({
+      where: { id: packageId },
+      data: {
+        status,
+        delivered_at: status === 'delivered' ? new Date() : null
+      }
+    });
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Package not found' });
-    }
-
-    const [updatedPackage] = await pool.execute('SELECT * FROM packages WHERE id = ?', [packageId]);
-    res.json(updatedPackage[0]);
+    res.json(updatedPackage);
   } catch (error) {
     console.error('Error updating package status:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Package not found' });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 });
 
