@@ -1,0 +1,16 @@
+model Route {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  name        String   @db.VarChar(100)
+  code        String   @unique @db.VarChar(20)
+  distance    Decimal  @db.Decimal(8, 2)
+  base_fare   Decimal  @db.Decimal(8, 2)
+  per_km_rate Decimal  @db.Decimal(8, 2)
+  stops       Json
+  active      Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  buses Bus[]
+}

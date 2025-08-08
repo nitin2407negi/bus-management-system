@@ -1,0 +1,32 @@
+model Bus {
+  id               Int       @id @default(autoincrement())
+  user_id          Int
+  bus_number       String    @unique @db.VarChar(20)
+  capacity         Int       @default(45)
+  route_id         Int?
+  driver_id        Int?
+  conductor_id     Int?
+  status           BusStatus @default(stopped)
+  current_location String?   @db.VarChar(200)
+  fuel_level       Decimal?  @db.Decimal(5, 2) @default(0)
+  last_maintenance DateTime?
+  insurance_expiry DateTime?
+  permit_expiry    DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  // Relations
+  user      User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  route     Route?     @relation(fields: [route_id], references: [id], onDelete: SetNull)
+  driver    Driver?    @relation(fields: [driver_id], references: [id], onDelete: SetNull)
+  conductor Conductor? @relation(fields: [conductor_id], references: [id], onDelete: SetNull)
+  tickets   Ticket[]
+  packages  Package[]
+  dailyReports DailyReport[]
+}
+
+enum BusStatus {
+  running
+  stopped
+  maintenance
+}

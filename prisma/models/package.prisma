@@ -1,0 +1,27 @@
+model Package {
+  id              Int           @id @default(autoincrement())
+  bus_id          Int
+  package_number  String        @unique @db.VarChar(50)
+  sender_name     String        @db.VarChar(100)
+  sender_phone    String        @db.VarChar(15)
+  receiver_name   String        @db.VarChar(100)
+  receiver_phone  String        @db.VarChar(15)
+  from_stop       String        @db.VarChar(100)
+  to_stop         String        @db.VarChar(100)
+  description     String?       @db.Text
+  weight          Decimal?      @db.Decimal(8, 2)
+  fare            Decimal       @db.Decimal(8, 2)
+  status          PackageStatus @default(booked)
+  booked_at       DateTime      @default(now())
+  delivered_at    DateTime?
+
+  // Relations
+  bus Bus @relation(fields: [bus_id], references: [id], onDelete: Cascade)
+}
+
+enum PackageStatus {
+  booked
+  in_transit
+  delivered
+  cancelled
+}

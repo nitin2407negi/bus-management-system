@@ -1,0 +1,18 @@
+model Driver {
+  id               Int      @id @default(autoincrement())
+  user_id          Int
+  name             String   @db.VarChar(100)
+  phone            String   @db.VarChar(15)
+  license_number   String   @db.VarChar(50)
+  license_expiry   DateTime?
+  experience_years Int      @default(0)
+  address          String?  @db.Text
+  emergency_contact String? @db.VarChar(15)
+  active           Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  // Relation to User model
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  buses Bus[]
+}

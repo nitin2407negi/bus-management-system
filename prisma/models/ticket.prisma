@@ -1,0 +1,30 @@
+model Ticket {
+  id              Int           @id @default(autoincrement())
+  bus_id          Int
+  ticket_number   String        @unique @db.VarChar(50)
+  passenger_name  String?       @db.VarChar(100)
+  passenger_phone String?       @db.VarChar(15)
+  from_stop       String        @db.VarChar(100)
+  to_stop         String        @db.VarChar(100)
+  passenger_type  PassengerType @default(general)
+  fare            Decimal       @db.Decimal(8, 2)
+  issue_time      DateTime      @default(now())
+  journey_date    DateTime
+  status          TicketStatus  @default(booked)
+
+  // Relations
+  bus Bus @relation(fields: [bus_id], references: [id], onDelete: Cascade)
+}
+
+enum PassengerType {
+  general
+  student
+  senior
+  disabled
+}
+
+enum TicketStatus {
+  booked
+  used
+  cancelled
+}
