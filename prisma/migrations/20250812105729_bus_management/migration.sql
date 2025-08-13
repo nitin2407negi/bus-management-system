@@ -134,9 +134,9 @@ CREATE TABLE `Ticket` (
 CREATE TABLE `User` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(191) NOT NULL,
-    `email` VARCHAR(191) NOT NULL,
+    `email` VARCHAR(191) NULL,
     `password` VARCHAR(191) NULL,
-    `phone` VARCHAR(191) NULL,
+    `phone` VARCHAR(191) NOT NULL,
     `role` ENUM('owner', 'admin', 'conductor', 'driver') NOT NULL DEFAULT 'owner',
     `company_name` VARCHAR(191) NULL,
     `is_verified` BOOLEAN NOT NULL DEFAULT false,
@@ -144,6 +144,7 @@ CREATE TABLE `User` (
     `updated_at` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `User_email_key`(`email`),
+    UNIQUE INDEX `User_phone_key`(`phone`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

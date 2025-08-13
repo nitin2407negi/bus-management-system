@@ -1,45 +1,32 @@
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
-const { PrismaClient } = require("../generated/prisma"); // adjust if needed
+const { PrismaClient } = require("../generated/prisma");
 const prisma = new PrismaClient();
 const crypto = require("crypto");
-const nodemailer = require("nodemailer");
+const twilio = require("twilio");
 
 const JWT_SECRET = process.env.JWT_SECRET || "replace_me";
 const OTP_EXPIRY_MINUTES = parseInt(process.env.OTP_EXPIRY_MINUTES || "5", 10);
 
-// --- Setup NodeMailer transporter ---
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT, 10),
-  secure: process.env.EMAIL_SECURE === "true",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// --- Setup Twilio client ---
+const twilioClient = twilio(
+  process.env.TWILIO_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
 
 // --- Helpers ---
 function generateOTP() {
   return crypto.randomInt(100000, 999999).toString();
 }
 
-async function sendOTP(to, otp) {
+async function sendOTP(phone, otp) {
   try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-      to,
-      subject: "Your Bus Management OTP Code",
-      html: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-          <h2>Bus Management</h2>
-          <p>Your OTP code is:</p>
-          <h1 style="color: #2e86de;">${otp}</h1>
-          <p>This code will expire in ${OTP_EXPIRY_MINUTES} minutes.</p>
-        </div>
-      `,
+    await twilioClient.messages.create({
+      body: `Your Bus Management OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
+      from: process.env.TWILIO_PHONE_NUMBER, // must be a Twilio verified number
+      to: phone, // e.g. "+919876543210"
     });
-    console.log(`✅ OTP sent to ${to}`);
+    console.log(`✅ OTP sent to ${phone}`);
   } catch (err) {
     console.error("❌ Failed to send OTP:", err);
   }
@@ -62,12 +49,12 @@ async function saveOTP(userId, otpCode, otpType) {
 // 1. Request Registration OTP
 module.exports.requestRegistrationOTP = async (req, res) => {
   try {
-    const { email, name, phone, company_name } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: "Email is required" });
+    const { phone, name, company_name } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: "Phone number is required" });
     }
 
-    let user = await prisma.user.findUnique({ where: { email } });
+    let user = await prisma.user.findUnique({ where: { phone } });
 
     if (user && user.is_verified) {
       return res.status(400).json({ error: "User already exists" });
@@ -77,8 +64,7 @@ module.exports.requestRegistrationOTP = async (req, res) => {
       user = await prisma.user.create({
         data: {
           name: name || null,
-          email,
-          phone: phone || null,
+          phone,
           company_name: company_name || null,
           is_verified: false,
         },
@@ -87,7 +73,7 @@ module.exports.requestRegistrationOTP = async (req, res) => {
 
     const otp = generateOTP();
     await saveOTP(user.id, otp, "REGISTRATION");
-    await sendOTP(email, otp);
+    await sendOTP(phone, otp);
 
     res.json({ message: "OTP sent for registration" });
   } catch (error) {
@@ -99,12 +85,12 @@ module.exports.requestRegistrationOTP = async (req, res) => {
 // 2. Verify Registration OTP
 module.exports.verifyRegistrationOTP = async (req, res) => {
   try {
-    const { email, otp } = req.body;
-    if (!email || !otp) {
-      return res.status(400).json({ error: "Email and OTP are required" });
+    const { phone, otp } = req.body;
+    if (!phone || !otp) {
+      return res.status(400).json({ error: "Phone number and OTP are required" });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { phone } });
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const otpRecord = await prisma.oTP.findFirst({
@@ -147,19 +133,19 @@ module.exports.verifyRegistrationOTP = async (req, res) => {
 // 3. Request Login OTP
 module.exports.requestLoginOTP = async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: "Email is required" });
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: "Phone number is required" });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { phone } });
     if (!user || !user.is_verified) {
       return res.status(404).json({ error: "User not found or not verified" });
     }
 
     const otp = generateOTP();
     await saveOTP(user.id, otp, "LOGIN");
-    await sendOTP(email, otp);
+    await sendOTP(phone, otp);
 
     res.json({ message: "OTP sent for login" });
   } catch (error) {
@@ -171,12 +157,12 @@ module.exports.requestLoginOTP = async (req, res) => {
 // 4. Verify Login OTP
 module.exports.verifyLoginOTP = async (req, res) => {
   try {
-    const { email, otp } = req.body;
-    if (!email || !otp) {
-      return res.status(400).json({ error: "Email and OTP are required" });
+    const { phone, otp } = req.body;
+    if (!phone || !otp) {
+      return res.status(400).json({ error: "Phone number and OTP are required" });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { phone } });
     if (!user || !user.is_verified) {
       return res.status(404).json({ error: "User not found or not verified" });
     }

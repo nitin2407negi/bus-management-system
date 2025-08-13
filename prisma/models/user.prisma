@@ -1,29 +1,31 @@
 model User {
   id           Int      @id @default(autoincrement())
   name         String
-  email        String   @unique
-  password     String?  // Make optional for OTP-only users
-  phone        String?
+  email        String?  @unique   // Optional for phone-based login
+  password     String?           // Optional if using OTP only
+  phone        String   @unique  // Required for OTP login
   role         Role     @default(owner)
   company_name String?
-  is_verified  Boolean  @default(false) // Track verification status
+  is_verified  Boolean  @default(false)
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
+
   drivers      Driver[]
   routes       Route[]
   conductors   Conductor[]
   buses        Bus[]
-  otps         OTP[]    // Relationship with OTP table
+  otps         OTP[]
 }
 
 model OTP {
   id         Int      @id @default(autoincrement())
   user_id    Int
   otp_code   String
-  otp_type   OTPType  // Registration, Login, Password Reset
+  otp_type   OTPType
   expires_at DateTime
   is_used    Boolean  @default(false)
   created_at DateTime @default(now())
+
   user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
 
