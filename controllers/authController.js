@@ -75,7 +75,7 @@ module.exports.requestRegistrationOTP = async (req, res) => {
     await saveOTP(user.id, otp, "REGISTRATION");
     await sendOTP(phone, otp);
 
-    res.json({ message: "OTP sent for registration" });
+    res.json({ message: "OTP sent for registration" ,phone});
   } catch (error) {
     console.error("Request Registration OTP error:", error);
     res.status(500).json({ error: "Internal server error" });
